@@ -17,6 +17,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1  # Change this to your desired AWS region
 
-      - name: Create CloudFormation Stack
+      #- name: Create CloudFormation Stack
+      #  run: |
+      #    aws cloudformation create-stack --stack-name myteststack --template-body file://ec2.yaml
+
+      - name: Check endpoint availability
         run: |
-          aws cloudformation create-stack --stack-name myteststack --template-body file://ec2.yaml
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://44.204.72.182)
+          if [[ "$HTTP_STATUS" -ne 200 ]]; then
+            echo "Smoke test failed! HTTP status: $HTTP_STATUS"
+            exit 1
+          fi
+          echo "Smoke test passed! HTTP status: $HTTP_STATUS"
+
+      - name: Check endpoint availability
+        run: |
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://44.204.72.181)
+          if [[ "$HTTP_STATUS" -ne 200 ]]; then
+            echo "Smoke test failed! HTTP status: $HTTP_STATUS"
+            exit 1
+          fi
+          echo "Smoke test passed! HTTP status: $HTTP_STATUS"
