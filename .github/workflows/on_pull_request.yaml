@@ -23,7 +23,12 @@ jobs:
 
       - name: Check endpoint availability
         run: |
-          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://44.204.72.182)
+          set -e
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
+            --connect-timeout 5 --max-time 10 \
+            --retry 2 --retry-delay 3 \
+            http://44.204.72.182 || echo "000")
+
           if [[ "$HTTP_STATUS" -ne 200 ]]; then
             echo "Smoke test failed! HTTP status: $HTTP_STATUS"
             exit 1
@@ -32,7 +37,12 @@ jobs:
 
       - name: Check endpoint availability
         run: |
-          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://44.204.72.181)
+          set -e
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
+            --connect-timeout 5 --max-time 10 \
+            --retry 2 --retry-delay 3 \
+            http://44.204.72.181 || echo "000")
+
           if [[ "$HTTP_STATUS" -ne 200 ]]; then
             echo "Smoke test failed! HTTP status: $HTTP_STATUS"
             exit 1
