@@ -17,31 +17,47 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1  # Change this to your desired AWS region
 
-      #- name: Create CloudFormation Stack
-      #  run: |
-      #    aws cloudformation create-stack --stack-name myteststack --template-body file://ec2.yaml
-
-      - name: Check endpoint availability
+      - name: Deploy CloudFormation Stack
         run: |
-          set -e
-          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
-            --connect-timeout 5 --max-time 10 \
-            --retry 2 --retry-delay 3 \
-            http://44.204.72.182 || echo "000")
+          aws cloudformation create-stack --stack-name myteststack --template-body file://ec2.yaml
+          echo "Waiting for CloudFormation stack to complete..."
+          aws cloudformation wait stack-create-complete --stack-name myteststack
+          echo "CloudFormation stack creation succeeded!"
 
-          if [[ "$HTTP_STATUS" -ne 200 ]]; then
-            echo "Smoke test failed! HTTP status: $HTTP_STATUS"
+      - name: Retrieve EC2 Public IP
+        run: |
+          INSTANCE_IP=$(aws cloudformation describe-stacks --stack-name myteststack \
+            --query "Stacks[0].Outputs[?OutputKey=='InstancePublicIp'].OutputValue" \
+            --output text)
+          if [[ -z "$INSTANCE_IP" ]]; then
+            echo "Failed to retrieve EC2 instance IP."
             exit 1
           fi
-          echo "Smoke test passed! HTTP status: $HTTP_STATUS"
+          echo "EC2 Public IP: $INSTANCE_IP"
+          echo "INSTANCE_IP=$INSTANCE_IP" >> $GITHUB_ENV
 
-      - name: Check endpoint availability
+      - name: Wait for EC2 Instance Status Checks to Pass
         run: |
-          set -e
-          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
-            --connect-timeout 5 --max-time 10 \
-            --retry 2 --retry-delay 3 \
-            http://44.204.72.181 || echo "000")
+          echo "Waiting for EC2 instance status checks to pass..."
+          for i in {1..10}; do
+            STATUS=$(aws ec2 describe-instance-status \
+              --instance-ids $(aws cloudformation describe-stack-resources \
+              --stack-name myteststack --query "StackResources[?LogicalResourceId=='MyEC2Instance'].PhysicalResourceId" --output text) \
+              --query "InstanceStatuses[0].InstanceStatus.Status" --output text)
+            
+            if [[ "$STATUS" == "ok" ]]; then
+              echo "EC2 instance status checks passed!"
+              break
+            fi
+            
+            echo "Still waiting... (attempt $i/10)"
+            sleep 30
+          done
+
+      - name: Perform Smoke Test
+        run: |
+          echo "Running smoke test on http://$INSTANCE_IP"
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --connect-timeout 5 --max-time 10 --retry 2 --retry-delay 3 http://$INSTANCE_IP || echo "000")
 
           if [[ "$HTTP_STATUS" -ne 200 ]]; then
             echo "Smoke test failed! HTTP status: $HTTP_STATUS"
